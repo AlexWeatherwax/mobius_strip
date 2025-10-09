@@ -1,0 +1,19 @@
+<!DOCTYPE html><html lang="ru"> {% load static %} <head> <meta charset="UTF-8"> <title>Вход</title> <link rel="stylesheet" href="{% static 'css/base.css' %}"> <style> .field { margin-bottom: 12px; } .errorlist { color: #c00; margin: 6px 0 0; padding: 0; list-style: none; font-size: 14px; } .nonfield { color: #c00; margin-bottom: 12px; } </style> </head> <body> <div class="auth-wrap"> <div class="auth-form"> <h2>Вход</h2>
+{% if form.non_field_errors %}
+  <div class="nonfield">{{ form.non_field_errors }}</div>
+{% endif %}
+
+<form method="post" novalidate> {% csrf_token %}
+{% if form.non_field_errors %}
+
+<div class="nonfield">{{ form.non_field_errors }}</div>
+{% endif %}
+
+<div class="field"> {{ form.nickname.label_tag }} {{ form.nickname }} {{ form.nickname.errors }} </div> <div class="field"> {{ form.password.label_tag }} {{ form.password }} {{ form.password.errors }} </div>
+<button type="submit">Войти</button>
+
+</form>
+
+<p>Нет аккаунта? <a href="{% url 'clinica:register' %}">Зарегистрироваться</a></p>
+</div> <div class="auth-side"></div> </div> </body> </html>
+

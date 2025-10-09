@@ -1,0 +1,22 @@
+{% extends 'clinica/base.html' %}
+{% block title %}Ментальное состояние{% endblock %}
+{% block content %}
+
+<h2>Ментальное состояние</h2>
+<p>Текущий уровень:
+  <strong>{{ ms.level }}</strong> (диапазон: -3..+3)</p>
+<div> <form method="post" style="display:inline;"> {% csrf_token %}
+  <input type="hidden" name="action" value="dec">
+  <button type="submit" {% if ms.level <= -3 %}disabled{% endif %}>Ухудшить</button>
+</form> <form method="post" style="display:inline; margin-left: 8px;"> {% csrf_token %}
+  <input type="hidden" name="action" value="inc">
+  <button type="submit" {% if ms.level >= 3 %}disabled{% endif %}>Улучшить</button>
+</form>
+</div>
+<h3>Описание</h3>
+<div> {% if ms.description %}
+  <div>{{ ms.description|linebreaksbr }}</div>
+  {% else %}
+  <p><em>Описание отсутствует.</em></p>
+  {% endif %}
+</div> {% endblock %}

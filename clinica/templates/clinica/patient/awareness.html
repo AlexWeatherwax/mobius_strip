@@ -1,0 +1,29 @@
+{% extends 'clinica/base.html' %} {% block title %}Осознание{% endblock %} {% block content %}
+
+<h2>Осознание</h2><div id="awareness"> {% for p in props %} <div class="prop"> <p><strong>Свойство {{ p.num }}</strong></p> <p>Условие: {{ p.condition|default:'' }}</p>
+  <button class="toggle" data-target="prop{{ p.num }}">Активировать</button>
+  <div id="prop{{ p.num }}" class="desc" style="display:none; margin-left:12px;">
+    <p>{{ p.description|default:'' }}</p>
+    <button class="close" data-target="prop{{ p.num }}">Закрыть</button>
+  </div>
+</div>
+{% endfor %}
+
+{% if extras.extra1 %}
+
+<div class="extra" id="extra1" style="display:none;">
+  <h3>Доп. свойство 1</h3>
+  <p>{{ extras.extra1 }}</p>
+</div>
+{% endif %}
+
+{% if extras.extra2 %}
+
+<div class="extra" id="extra2" style="display:none;">
+  <h3>Доп. свойство 2</h3>
+  <p>{{ extras.extra2 }}</p>
+</div>
+{% endif %}
+
+</div><script> (function(){ function isVisible(el){ if (!el) return false; const cs = getComputedStyle(el); return cs.display !== 'none' && cs.visibility !== 'hidden'; } function countOpenProps(){ const descs = document.querySelectorAll('.prop .desc'); let open = 0; descs.forEach(d => { if (isVisible(d)) open += 1; }); return open; } function updateExtras(){ const open = countOpenProps(); const extra1 = document.getElementById('extra1'); const extra2 = document.getElementById('extra2'); if (extra1) extra1.style.display = open >= 2 ? 'block' : 'none'; if (extra2) extra2.style.display = open >= 3 ? 'block' : 'none'; } document.addEventListener('click', function(e){ if (e.target.classList.contains('toggle')) { const id = e.target.dataset.target; const el = document.getElementById(id); if (el) { const show = getComputedStyle(el).display === 'none'; el.style.display = show ? 'block' : 'none'; updateExtras(); } } else if (e.target.classList.contains('close')) { const id = e.target.dataset.target; const el = document.getElementById(id); if (el) { el.style.display = 'none'; updateExtras(); } } }); document.addEventListener('DOMContentLoaded', updateExtras); // На случай, если скрипт внизу и DOM уже готов: updateExtras(); })(); </script>
+{% endblock %}

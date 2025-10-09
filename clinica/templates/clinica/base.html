@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="ru">
+{% load static %}<link rel="stylesheet" href="{% static 'css/base.css' %}">
+<head>
+  <meta charset="UTF-8" />
+  <title>{% block title %}Mobius Clinica{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/base.css' %}">
+</head>
+<body> <header class="header">
+  <div class="logo">Mobius Clinica</div>
+  <div class="user">
+    {% if user.is_authenticated %}
+    <span>{{ user.username }}</span>
+    <a href="{% url 'clinica:logout' %}">Выйти</a>
+    {% endif %}
+  </div>
+</header>
+<div class="layout">
+  {% if user.is_authenticated %}
+  <aside class="sidebar">
+    <ul>
+      {% if user.patient_profile %}
+      <li><a href="{% url 'clinica:patient_profile' %}">Личный кабинет</a></li>
+      <li><a href="{% url 'clinica:patient_mental_state' %}">Ментальное состояние</a></li>
+      <li><a href="{% url 'clinica:patient_chemical_recipes' %}">Химические рецепты</a></li>
+      <li><a href="{% url 'clinica:patient_mechanical_compounds' %}">Приборы</a></li>
+      <li><a href="{% url 'clinica:patient_awareness' %}">Осознание</a></li>
+      <li><a href="{% url 'clinica:patient_nightmare' %}">Кошмар</a></li>
+      {% elif user.doctor_profile %}
+      <li><a href="{% url 'clinica:doctor_profile' %}">Личный кабинет</a></li>
+      <li><a href="{% url 'clinica:doctor_patients' %}">Пациенты</a></li>
+      <li><a href="{% url 'clinica:doctor_chemical_recipes' %}">Химические рецепты</a></li>
+      <li><a href="{% url 'clinica:doctor_mechanical_compounds' %}">Приборы</a></li> {% endif %}
+    </ul>
+  </aside>
+  {% endif %}
+  <main class="content"> {% block content %}{% endblock %} </main>
+</div>
+</body>
+</html>
+

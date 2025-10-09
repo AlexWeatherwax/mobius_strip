@@ -1,0 +1,17 @@
+{% extends 'clinica/base.html' %}
+{% block title %}Химические рецепты{% endblock %}
+{% block content %}
+
+<h2>Химические рецепты</h2>
+<ul>
+  {% for it in items %}
+  <li>{{ it.property_1 }} | {{ it.property_2 }} | {{ it.property_3 }} — срок: {{ it.duration }}</li>
+  {% empty %}
+  <li>Пока нет рецептов</li>
+  {% endfor %}
+</ul>
+<h3>Добавить рецепт</h3>
+<form method="post"> {% csrf_token %} {{ form.as_p }}
+  <button type="submit">Добавить</button>
+</form>
+{% endblock %}

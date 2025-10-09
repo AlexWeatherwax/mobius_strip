@@ -1,0 +1,24 @@
+{% extends 'clinica/base.html' %}
+{% block title %}Осознание: {{ patient.full_name }}{% endblock %}
+{% block content %}
+
+<h2>Осознание — редактирование</h2>
+<form method="post"> {% csrf_token %}
+  <h3>Свойство 1</h3>
+  <p>Условие: <textarea name="property_1_condition">{{ amap.property_1_condition }}</textarea></p>
+  <p>Описание: <textarea name="property_1_description">{{ amap.property_1_description }}</textarea></p>
+  <h3>Свойство 2</h3>
+  <p>Условие: <textarea name="property_2_condition">{{ amap.property_2_condition }}</textarea></p>
+  <p>Описание: <textarea name="property_2_description">{{ amap.property_2_description }}</textarea></p>
+  <h3>Свойство 3</h3>
+  <p>Условие: <textarea name="property_3_condition">{{ amap.property_3_condition }}</textarea></p>
+  <p>Описание: <textarea name="property_3_description">{{ amap.property_3_description }}</textarea></p>
+  <h3>Свойство 4</h3>
+  <p>Условие: <textarea name="property_4_condition">{{ amap.property_4_condition }}</textarea></p>
+  <p>Описание: <textarea name="property_4_description">{{ amap.property_4_description }}</textarea></p>
+  <h3>Доп. свойства</h3>
+  <p>Доп 1 — описание: <textarea name="extra_property_1_description">{{ amap.extra_property_1_description }}</textarea></p>
+  <p>Доп 2 — описание: <textarea name="extra_property_2_description">{{ amap.extra_property_2_description }}</textarea></p>
+  <button type="submit">Сохранить</button>
+</form>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+{% load static %}
+<head>
+  <meta charset="UTF-8">
+  <title>Регистрация</title>
+  <link rel="stylesheet" href="{% static 'css/base.css' %}">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-form"> <h2>Регистрация</h2>
+    <form method="post">
+      {% csrf_token %} {{ form.non_field_errors }}
+      <div><label>Никнейм</label>{{ form.nickname }}</div>
+      <div><label>Пароль</label>{{ form.password1 }}</div>
+      <div><label>Повторите пароль</label>{{ form.password2 }}</div>
+      <div><label>Имя персонажа</label>{{ form.full_name }}</div>
+      <div><label>Тип персонажа</label>{{ form.role }}</div>
+      <div><label>Telegram</label>{{ form.telegram }}</div>
+      <button type="submit">Создать аккаунт</button>
+    </form>
+    <p>Уже есть аккаунт? <a href="{% url 'clinica:login' %}">Войти</a></p>
+  </div> <div class="auth-side"></div>
+</div>
+</body>
+</html>

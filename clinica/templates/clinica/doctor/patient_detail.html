@@ -1,0 +1,14 @@
+{% extends 'clinica/base.html' %}
+{% block title %}Пациент {{ patient.full_name }}{% endblock %}
+{% block content %}
+
+<h2>{{ patient.full_name }} (@{{ patient.nickname }})</h2>
+<form method="post"> {% csrf_token %} {{ form.as_p }}
+  <button type="submit" name="save_patient">Сохранить</button>
+</form>
+<h3>Ментальное состояние</h3>
+<form method="post"> {% csrf_token %} {{ ms_form.as_p }}
+  <button type="submit" name="save_ms">Сохранить описание</button>
+</form>
+<p> <a href="{% url 'clinica:doctor_patient_awareness_edit' patient.id %}">Редактировать карту осознания</a> | <a href="{% url 'clinica:doctor_patient_nightmare_edit' patient.id %}">Редактировать карту кошмара</a> </p>
+{% endblock %}

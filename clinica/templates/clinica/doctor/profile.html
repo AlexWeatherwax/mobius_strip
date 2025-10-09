@@ -1,0 +1,13 @@
+{% extends 'clinica/base.html' %}
+{% block title %}ЛК врача{% endblock %}
+{% block content %}
+
+<h2>Личный кабинет</h2>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %} {{ form.as_p }}
+  <button type="submit">Сохранить</button>
+</form>
+{% if doctor.avatar %}
+<p><img src="{{ doctor.avatar.url }}" style="height:100px;border-radius:8px;"></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends 'clinica/base.html' %}
+{% block title %}Приборы{% endblock %}
+{% block content %}
+
+<h2>Все приборы</h2>
+<ul> {% for it in items %}
+  <li>{{ it.owner.full_name }}: {{ it.property_1 }} | {{ it.property_2 }} | {{ it.property_3 }} — срок: {{ it.duration }}</li>
+  {% empty %}
+  <li>Нет записей</li>
+  {% endfor %}
+</ul>
+<h3>Добавить прибор</h3>
+<form method="post"> {% csrf_token %}
+  <p>Автор: <select name="owner_id"> {% for p in patients %}
+    <option value="{{ p.id }}">
+      {{ p.full_name }} (@{{ p.nickname }})
+    </option>
+    {% endfor %}
+  </select>
+  </p> {{ form.as_p }}
+  <button type="submit">Добавить</button>
+</form>
+{% endblock %}
