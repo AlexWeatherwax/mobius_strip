@@ -18,12 +18,33 @@ from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import path, include
+from django.contrib import admin
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from tasks.views import TaskViewSet, RegisterView, LogoutView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 
+router = DefaultRouter()
+router.register(r'tasks', TaskViewSet, basename='task')
 
-urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('', include('clinica.urls', namespace='clinica')),
-]
+urlpatterns = [path('admin/', admin.site.urls),
+               path('', include('clinica.urls', namespace='clinica')),
+
+               # API задач
+               path('api/', include(router.urls)),
+
+               # Аутентификация
+               path('api/auth/register/', RegisterView.as_view(), name='register'),
+               path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+               path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+               path('api/auth/logout/', LogoutView.as_view(), name='logout'),
+
+               # Документация
+               path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+               path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+               path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc')]
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -38,8 +38,22 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_redis',
-    'clinica.apps.ClinicaConfig'
+    'clinica.apps.ClinicaConfig',
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    'drf_spectacular',
+    'tasks'
 ]
+
+REST_FRAMEWORK = { 'DEFAULT_AUTHENTICATION_CLASSES': ( 'rest_framework_simplejwt.authentication.JWTAuthentication', ),
+                   'DEFAULT_PERMISSION_CLASSES': ( 'rest_framework.permissions.AllowAny', ),
+                   'DEFAULT_PAGINATION_CLASS': 'tasks.pagination.QueryPageSizePagination',
+                   'PAGE_SIZE': 10,
+                   'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema'}
+SIMPLE_JWT = {'BLACKLIST_AFTER_ROTATION': True}
+
+SPECTACULAR_SETTINGS = { 'TITLE': 'Tasks API', 'DESCRIPTION': 'API для управления задачами', 'VERSION': '1.0.0'}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
