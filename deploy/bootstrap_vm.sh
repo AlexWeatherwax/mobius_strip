@@ -6,24 +6,14 @@ DJANGO_USER="django"
 PROJECT_PACKAGE="mobius_clinica"
 BIND_ADDR="127.0.0.1:8001"
 
-SERVER_NAME="{SERVER_NAME:-vm-686640}"
-ALLOWED_HOSTS="{ALLOWED_HOSTS:-vm-686640,127.0.0.1,localhost}"
-CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS:-}"
-DEBUG="\({DEBUG:-0}"
-SECRET_KEY="\){SECRET_KEY:-\((openssl rand -hex 32)}"
-DJANGO_SETTINGS_MODULE="\){DJANGO_SETTINGS_MODULE:-mobius_clinica.settings}"
+SERVER_NAME="{SERVER_NAME:-vm-686640}"ALLOWED_HOSTS="{ALLOWED_HOSTS:-vm-686640,127.0.0.1,localhost}"CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS:-}"
+DEBUG="\({DEBUG:-0}"SECRET_KEY="\){SECRET_KEY:-\((openssl rand -hex 32)}"DJANGO_SETTINGS_MODULE="\){DJANGO_SETTINGS_MODULE:-mobius_clinica.settings}"
 
-DB_NAME="\({DB_NAME:-mobius_clinica}"
-DB_USER="\){DB_USER:-mobius_user}"
-DB_PASSWORD="\({DB_PASSWORD:-ChangeMeStrong}"
-DB_HOST="\){DB_HOST:-127.0.0.1}"
-DB_PORT="${DB_PORT:-5432}"
+DB_NAME="\({DB_NAME:-mobius_clinica}"DB_USER="\){DB_USER:-mobius_user}"DB_PASSWORD="\({DB_PASSWORD:-ChangeMeStrong}"DB_HOST="\){DB_HOST:-127.0.0.1}"DB_PORT="${DB_PORT:-5432}"
 
-USE_REDIS="\({USE_REDIS:-1}"
-REDIS_URL="\){REDIS_URL:-redis://127.0.0.1:6379/1}"
+USE_REDIS="\({USE_REDIS:-1}"REDIS_URL="\){REDIS_URL:-redis://127.0.0.1:6379/1}"
 
-ALLOWED_HOSTS_ESCAPED="\({ALLOWED_HOSTS//,/\\,}"
-CSRF_TRUSTED_ORIGINS_ESCAPED="\){CSRF_TRUSTED_ORIGINS//,/\,}"
+ALLOWED_HOSTS_ESCAPED="\({ALLOWED_HOSTS//,/\\,}"CSRF_TRUSTED_ORIGINS_ESCAPED="\){CSRF_TRUSTED_ORIGINS//,/\,}"
 
 log() { echo -e "\033[1;32mINFO\033[0m $*"; } ensure_pkg() { dpkg -s "$1" >/dev/null 2>&1 || sudo apt-get install -y "$1"; } psql_exec() { sudo -u postgres psql -tAc "$1"; }
 ensure_system() { sudo apt-get update -y ensure_pkg git ensure_pkg python3-venv ensure_pkg python3-pip ensure_pkg build-essential ensure_pkg libpq-dev ensure_pkg postgresql ensure_pkg postgresql-contrib ensure_pkg redis-server ensure_pkg nginx ensure_pkg supervisor
