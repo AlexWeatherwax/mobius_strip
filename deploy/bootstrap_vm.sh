@@ -129,24 +129,29 @@ ensure_venv() {
 ensure_db() {
     log "Настройка базы данных..."
     
-    # Создание пользователя БД
-    psql_exec "
-        DO \$\$ BEGIN
-            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='${DB_USER}') THEN
-                CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASSWORD}';
-            END IF;
-        END \$\$;"
+    # Создание пользователя БД (если не существует)
+    if ! psql_exec "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" | grep -q 1; then
+        log "Создание пользователя БД: ${DB_USER}"
+        psql_exec "CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';" || error "Не удалось создать пользователя БД"
+    else
+        log "Пользователь БД ${DB_USER} уже существует"
+        # Обновление пароля если пользователь уже существует
+        psql_exec "ALTER USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';" || error "Не удалось обновить пароль пользователя"
+    fi
     
-    # Создание базы данных
-    psql_exec "
-        DO \$\$ BEGIN
-            IF NOT EXISTS (SELECT FROM pg_database WHERE datname='${DB_NAME}') THEN
-                CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};
-            END IF;
-        END \$\$;"
+    # Создание базы данных (если не существует)
+    if ! psql_exec "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" | grep -q 1; then
+        log "Создание базы данных: ${DB_NAME}"
+        psql_exec "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};" || error "Не удалось создать базу данных"
+    else
+        log "База данных ${DB_NAME} уже существует"
+    fi
     
     # Предоставление прав
-    psql_exec "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
+    psql_exec "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};" || error "Не удалось предоставить права"
+    
+    # Дополнительные настройки для базы данных
+    psql_exec "ALTER DATABASE ${DB_NAME} SET timezone TO 'UTC';" || log "Не удалось установить часовой пояс, но это не критично"
 }
 
 django_manage() {
