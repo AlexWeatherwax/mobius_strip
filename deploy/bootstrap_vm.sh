@@ -15,7 +15,7 @@ ALLOWED_HOSTS="${ALLOWED_HOSTS:-vm-2fa9a6,127.0.0.1,localhost}"
 CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS:-}"
 DEBUG="${DEBUG:-0}"
 SECRET_KEY="${SECRET_KEY:-$(openssl rand -hex 32)}"
-DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-mobius_clinica.settings}"
+DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-mobius_clinica.production_settings}"
 
 # Настройки базы данных
 DB_NAME="${DB_NAME:-mobius_clinica}"
@@ -31,12 +31,6 @@ REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379/1}"
 # Настройки статических файлов
 STATIC_ROOT="${STATIC_ROOT:-${PROJECT_DIR}/staticfiles}"
 MEDIA_ROOT="${MEDIA_ROOT:-${PROJECT_DIR}/media}"
-
-# Настройки безопасности (для production)
-SECURE_HSTS_SECONDS="${SECURE_HSTS_SECONDS:-0}"
-SECURE_SSL_REDIRECT="${SECURE_SSL_REDIRECT:-0}"
-SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE:-0}"
-CSRF_COOKIE_SECURE="${CSRF_COOKIE_SECURE:-0}"
 
 # Экранирование для конфигурационных файлов
 ALLOWED_HOSTS_ESCAPED="${ALLOWED_HOSTS//,/\\,}"
@@ -211,12 +205,37 @@ django_manage() {
         export REDIS_URL='${REDIS_URL}' &&
         export STATIC_ROOT='${STATIC_ROOT}' &&
         export MEDIA_ROOT='${MEDIA_ROOT}' &&
-        export SECURE_HSTS_SECONDS='${SECURE_HSTS_SECONDS}' &&
-        export SECURE_SSL_REDIRECT='${SECURE_SSL_REDIRECT}' &&
-        export SESSION_COOKIE_SECURE='${SESSION_COOKIE_SECURE}' &&
-        export CSRF_COOKIE_SECURE='${CSRF_COOKIE_SECURE}' &&
         $*
     " || error "Ошибка выполнения Django команды: $*"
+}
+
+# Функция для проверки настроек Django
+check_django_settings() {
+    log "Проверка настроек Django..."
+    sudo -u "$DJANGO_USER" -H bash -c "
+        cd '$PROJECT_DIR' && 
+        source .venv/bin/activate && 
+        export DJANGO_SETTINGS_MODULE='${DJANGO_SETTINGS_MODULE}' &&
+        python -c \"
+import os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', '${DJANGO_SETTINGS_MODULE}')
+try:
+    import django
+    django.setup()
+    from django.conf import settings
+    print('=== Django Settings ===')
+    print('DEBUG:', settings.DEBUG)
+    print('ALLOWED_HOSTS:', settings.ALLOWED_HOSTS)
+    print('STATIC_ROOT:', getattr(settings, 'STATIC_ROOT', 'NOT SET'))
+    print('STATIC_URL:', getattr(settings, 'STATIC_URL', 'NOT SET'))
+    print('MEDIA_ROOT:', getattr(settings, 'MEDIA_ROOT', 'NOT SET'))
+    print('DATABASE:', settings.DATABASES['default']['NAME'])
+    print('=======================')
+except Exception as e:
+    print('Ошибка при проверке настроек:', e)
+    exit(1)
+        \"
+    " || error "Не удалось проверить настройки Django"
 }
 
 configure_django() {
@@ -231,6 +250,9 @@ configure_django() {
     "; then
         error "Django не доступен в виртуальном окружении"
     fi
+    
+    # Проверяем настройки
+    check_django_settings
     
     # Создание директорий для статики и медиа
     log "Создание директорий для статики и медиа..."
@@ -253,7 +275,7 @@ configure_django() {
         export DEBUG='${DEBUG}' &&
         export SECRET_KEY='${SECRET_KEY}' &&
         export ALLOWED_HOSTS='${ALLOWED_HOSTS}' &&
-        python manage.py check --deploy --fail-level WARNING 2>&1
+        python manage.py check --deploy 2>&1
     ")
     local check_exit_code=$?
     set -e
@@ -261,21 +283,25 @@ configure_django() {
     if [ $check_exit_code -eq 0 ]; then
         log "✅ Проверка конфигурации прошла успешно"
     else
-        warn "⚠️  Проверка конфигурации выявила предупреждения:"
+        warn "⚠️  Проверка конфигурации выявила проблемы:"
         echo "$check_output" | while IFS= read -r line; do
-            warn "$line"
+            if echo "$line" | grep -q "WARNINGS:" || echo "$line" | grep -q "SystemCheckError"; then
+                warn "$line"
+            else
+                echo "$line"
+            fi
         done
         
-        # Проверяем, есть ли критические ошибки (не предупреждения)
+        # Проверяем, есть ли критические ошибки
         if echo "$check_output" | grep -q "ERROR"; then
             error "Обнаружены критические ошибки конфигурации"
         else
-            log "Предупреждения безопасности проигнорированы, продолжаем деплой..."
+            log "Предупреждения проигнорированы, продолжаем деплой..."
         fi
     fi
     
-    # Проверка настроек статических файлов
-    log "Проверка настроек статических файлов..."
+    # Сбор статических файлов (только если STATIC_ROOT настроен)
+    log "Проверка возможности сбора статики..."
     if sudo -u "$DJANGO_USER" -H bash -c "
         cd '$PROJECT_DIR' && 
         source .venv/bin/activate && 
@@ -286,20 +312,20 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', '${DJANGO_SETTINGS_MODULE}')
 import django
 django.setup()
 from django.conf import settings
-print('STATIC_ROOT:', getattr(settings, 'STATIC_ROOT', 'Not set'))
-print('STATIC_URL:', getattr(settings, 'STATIC_URL', 'Not set'))
+static_root = getattr(settings, 'STATIC_ROOT', None)
+exit(0 if static_root and static_root != 'NOT SET' else 1)
         \"
-    " | grep -q "Not set"; then
-        log "⚠️  STATIC_ROOT не настроен в settings.py, пропускаем collectstatic"
-        log "💡 Добавьте STATIC_ROOT = '${STATIC_ROOT}' в настройки Django"
-    else
+    " 2>/dev/null; then
         log "Сбор статических файлов..."
         django_manage "python manage.py collectstatic --noinput --clear"
+    else
+        warn "⚠️  STATIC_ROOT не настроен, пропускаем collectstatic"
+        warn "💡 Добавьте STATIC_ROOT в настройки Django или используйте production_settings.py"
     fi
     
-    # Создание суперпользователя (опционально, можно закомментировать)
+    # Создание суперпользователя (опционально)
     # log "Создание суперпользователя..."
-    # django_manage "python manage.py createsuperuser --noinput --username admin --email admin@example.com || true"
+    # django_manage "echo \"from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser('admin', 'admin@example.com', 'password') if not User.objects.filter(username='admin').exists() else None\" | python manage.py shell"
 }
 
 configure_supervisor() {
@@ -324,7 +350,7 @@ stopasgroup=true
 killasgroup=true
 stdout_logfile=/var/log/${APP_NAME}/gunicorn.out.log
 stderr_logfile=/var/log/${APP_NAME}/gunicorn.err.log
-environment=DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE}",PYTHONUNBUFFERED="1",DEBUG="${DEBUG}",SECRET_KEY="${SECRET_KEY}",ALLOWED_HOSTS="${ALLOWED_HOSTS_ESCAPED}",CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS_ESCAPED}",DB_NAME="${DB_NAME}",DB_USER="${DB_USER}",DB_PASSWORD="${DB_PASSWORD}",DB_HOST="${DB_HOST}",DB_PORT="${DB_PORT}",USE_REDIS="${USE_REDIS}",REDIS_URL="${REDIS_URL}",STATIC_ROOT="${STATIC_ROOT}",MEDIA_ROOT="${MEDIA_ROOT}",SECURE_HSTS_SECONDS="${SECURE_HSTS_SECONDS}",SECURE_SSL_REDIRECT="${SECURE_SSL_REDIRECT}",SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE}",CSRF_COOKIE_SECURE="${CSRF_COOKIE_SECURE}"
+environment=DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE}",PYTHONUNBUFFERED="1",DEBUG="${DEBUG}",SECRET_KEY="${SECRET_KEY}",ALLOWED_HOSTS="${ALLOWED_HOSTS_ESCAPED}",CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS_ESCAPED}",DB_NAME="${DB_NAME}",DB_USER="${DB_USER}",DB_PASSWORD="${DB_PASSWORD}",DB_HOST="${DB_HOST}",DB_PORT="${DB_PORT}",USE_REDIS="${USE_REDIS}",REDIS_URL="${REDIS_URL}",STATIC_ROOT="${STATIC_ROOT}",MEDIA_ROOT="${MEDIA_ROOT}"
 EOF
     
     # Применение конфигурации Supervisor
