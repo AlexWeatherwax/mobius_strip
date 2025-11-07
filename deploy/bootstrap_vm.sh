@@ -345,7 +345,9 @@ command=${PROJECT_DIR}/.venv/bin/gunicorn ${PROJECT_PACKAGE}.wsgi:application --
 user=${DJANGO_USER}
 autostart=true
 autorestart=true
+startretries=3
 stopsignal=TERM
+stopwaitsecs=10
 stopasgroup=true
 killasgroup=true
 stdout_logfile=/var/log/${APP_NAME}/gunicorn.out.log
@@ -356,10 +358,50 @@ EOF
     # Применение конфигурации Supervisor
     sudo supervisorctl reread || error "Ошибка reread supervisor"
     sudo supervisorctl update || error "Ошибка update supervisor"
-    sudo supervisorctl restart "${APP_NAME}" || sudo supervisorctl start "${APP_NAME}" || error "Не удалось запустить приложение через supervisor"
     
-    log "Статус сервиса:"
-    sudo supervisorctl status "${APP_NAME}"
+    # Даем время для обновления конфигурации
+    sleep 2
+    
+    # Останавливаем старый процесс если он существует
+    if sudo supervisorctl status "${APP_NAME}" >/dev/null 2>&1; then
+        log "Остановка существующего процесса..."
+        sudo supervisorctl stop "${APP_NAME}" || warn "Не удалось остановить существующий процесс"
+        sleep 2
+    fi
+    
+    # Запускаем приложение
+    log "Запуск приложения..."
+    if sudo supervisorctl start "${APP_NAME}"; then
+        log "✅ Приложение успешно запущено"
+    else
+        error "Не удалось запустить приложение через supervisor"
+    fi
+    
+    # Ждем и проверяем статус
+    log "Проверка статуса приложения..."
+    sleep 3
+    
+    local max_attempts=5
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        local status_output
+        status_output=$(sudo supervisorctl status "${APP_NAME}" 2>&1)
+        
+        if echo "$status_output" | grep -q "RUNNING"; then
+            log "✅ Приложение успешно запущено и работает"
+            log "Статус: $status_output"
+            return 0
+        elif echo "$status_output" | grep -q "STARTING"; then
+            log "🔄 Приложение запускается... (попытка $attempt/$max_attempts)"
+            sleep 3
+            ((attempt++))
+        else
+            error "❌ Ошибка запуска приложения: $status_output"
+        fi
+    done
+    
+    error "❌ Приложение не запустилось после $max_attempts попыток"
 }
 
 configure_nginx() {
@@ -416,6 +458,30 @@ EOF
     sudo systemctl reload nginx || error "Не удалось перезагрузить nginx"
 }
 
+# Функция для проверки работоспособности приложения
+check_application() {
+    log "Проверка работоспособности приложения..."
+    
+    local max_attempts=10
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if curl -s -f "http://${BIND_ADDR}/" >/dev/null 2>&1 || \
+           curl -s -f "http://${BIND_ADDR}/admin" >/dev/null 2>&1 || \
+           curl -s -f "http://${BIND_ADDR}/api" >/dev/null 2>&1; then
+            log "✅ Приложение отвечает на запросы"
+            return 0
+        else
+            log "🔄 Ожидание запуска приложения... (попытка $attempt/$max_attempts)"
+            sleep 3
+            ((attempt++))
+        fi
+    done
+    
+    warn "⚠️  Приложение не отвечает на запросы, но продолжаем деплой"
+    return 1
+}
+
 # Главная функция
 main() {
     log "Запуск деплоя приложения ${APP_NAME}..."
@@ -428,6 +494,9 @@ main() {
     configure_django
     configure_supervisor
     configure_nginx
+    
+    # Проверяем работоспособность
+    check_application
     
     log "Деплой завершен успешно!"
     log "Приложение доступно по адресу: http://${SERVER_NAME}"
