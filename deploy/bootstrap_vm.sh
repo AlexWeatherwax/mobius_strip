@@ -69,7 +69,7 @@ ensure_system() {
     local packages=(
         git python3-venv python3-pip build-essential
         libpq-dev postgresql postgresql-contrib
-        redis-server nginx supervisor
+        redis-server nginx supervisor curl
     )
     
     for pkg in "${packages[@]}"; do
@@ -209,35 +209,6 @@ django_manage() {
     " || error "Ошибка выполнения Django команды: $*"
 }
 
-# Функция для проверки настроек Django
-check_django_settings() {
-    log "Проверка настроек Django..."
-    sudo -u "$DJANGO_USER" -H bash -c "
-        cd '$PROJECT_DIR' && 
-        source .venv/bin/activate && 
-        export DJANGO_SETTINGS_MODULE='${DJANGO_SETTINGS_MODULE}' &&
-        python -c \"
-import os
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', '${DJANGO_SETTINGS_MODULE}')
-try:
-    import django
-    django.setup()
-    from django.conf import settings
-    print('=== Django Settings ===')
-    print('DEBUG:', settings.DEBUG)
-    print('ALLOWED_HOSTS:', settings.ALLOWED_HOSTS)
-    print('STATIC_ROOT:', getattr(settings, 'STATIC_ROOT', 'NOT SET'))
-    print('STATIC_URL:', getattr(settings, 'STATIC_URL', 'NOT SET'))
-    print('MEDIA_ROOT:', getattr(settings, 'MEDIA_ROOT', 'NOT SET'))
-    print('DATABASE:', settings.DATABASES['default']['NAME'])
-    print('=======================')
-except Exception as e:
-    print('Ошибка при проверке настроек:', e)
-    exit(1)
-        \"
-    " || error "Не удалось проверить настройки Django"
-}
-
 configure_django() {
     log "Настройка Django..."
     
@@ -251,9 +222,6 @@ configure_django() {
         error "Django не доступен в виртуальном окружении"
     fi
     
-    # Проверяем настройки
-    check_django_settings
-    
     # Создание директорий для статики и медиа
     log "Создание директорий для статики и медиа..."
     sudo mkdir -p "${STATIC_ROOT}" "${MEDIA_ROOT}"
@@ -263,6 +231,10 @@ configure_django() {
     # Применение миграций
     log "Применение миграций базы данных..."
     django_manage "python manage.py migrate"
+    
+    # Сбор статических файлов (только если STATIC_ROOT настроен)
+    log "Сбор статических файлов..."
+    django_manage "python manage.py collectstatic --noinput --clear"
     
     # Проверка валидности конфигурации Django (игнорируем предупреждения)
     log "Проверка конфигурации Django..."
@@ -299,33 +271,6 @@ configure_django() {
             log "Предупреждения проигнорированы, продолжаем деплой..."
         fi
     fi
-    
-    # Сбор статических файлов (только если STATIC_ROOT настроен)
-    log "Проверка возможности сбора статики..."
-    if sudo -u "$DJANGO_USER" -H bash -c "
-        cd '$PROJECT_DIR' && 
-        source .venv/bin/activate && 
-        export DJANGO_SETTINGS_MODULE='${DJANGO_SETTINGS_MODULE}' &&
-        python -c \"
-import os
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', '${DJANGO_SETTINGS_MODULE}')
-import django
-django.setup()
-from django.conf import settings
-static_root = getattr(settings, 'STATIC_ROOT', None)
-exit(0 if static_root and static_root != 'NOT SET' else 1)
-        \"
-    " 2>/dev/null; then
-        log "Сбор статических файлов..."
-        django_manage "python manage.py collectstatic --noinput --clear"
-    else
-        warn "⚠️  STATIC_ROOT не настроен, пропускаем collectstatic"
-        warn "💡 Добавьте STATIC_ROOT в настройки Django или используйте production_settings.py"
-    fi
-    
-    # Создание суперпользователя (опционально)
-    # log "Создание суперпользователя..."
-    # django_manage "echo \"from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser('admin', 'admin@example.com', 'password') if not User.objects.filter(username='admin').exists() else None\" | python manage.py shell"
 }
 
 configure_supervisor() {
@@ -410,6 +355,12 @@ configure_nginx() {
     local nginx_available="/etc/nginx/sites-available/${APP_NAME}"
     local nginx_enabled="/etc/nginx/sites-enabled/${APP_NAME}"
     
+    # Убедимся, что директории существуют
+    sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+    
+    # Удаляем старый конфиг если он существует
+    sudo rm -f "$nginx_available" "$nginx_enabled"
+    
     # Создание конфигурационного файла
     sudo tee "$nginx_available" > /dev/null << EOF
 server {
@@ -444,9 +395,7 @@ server {
 EOF
     
     # Активация сайта
-    if [ ! -L "$nginx_enabled" ]; then
-        sudo ln -s "$nginx_available" "$nginx_enabled" || error "Не удалось создать симлинк для nginx"
-    fi
+    sudo ln -sf "$nginx_available" "$nginx_enabled" || error "Не удалось создать симлинк для nginx"
     
     # Удаляем дефолтный конфиг nginx если он существует
     if [ -f "/etc/nginx/sites-enabled/default" ]; then
@@ -454,8 +403,13 @@ EOF
     fi
     
     # Проверка конфигурации и перезагрузка
-    sudo nginx -t || error "Ошибка конфигурации nginx"
-    sudo systemctl reload nginx || error "Не удалось перезагрузить nginx"
+    log "Проверка конфигурации Nginx..."
+    if sudo nginx -t; then
+        log "✅ Конфигурация Nginx верна"
+        sudo systemctl reload nginx || error "Не удалось перезагрузить nginx"
+    else
+        error "❌ Ошибка конфигурации nginx"
+    fi
 }
 
 # Функция для проверки работоспособности приложения
@@ -482,6 +436,35 @@ check_application() {
     return 1
 }
 
+# Функция для отображения информации о доступе
+show_access_info() {
+    local ip_address
+    ip_address=$(hostname -I | awk '{print $1}')
+    
+    log ""
+    log "🎉 Деплой завершен!"
+    log ""
+    log "🌐 Сайт доступен по адресам:"
+    log "   http://${SERVER_NAME}"
+    log "   http://${ip_address}"
+    log ""
+    log "📊 Для проверки статуса сервисов выполните:"
+    log "   sudo supervisorctl status ${APP_NAME}"
+    log "   sudo systemctl status nginx"
+    log ""
+    log "📝 Для просмотра логов выполните:"
+    log "   sudo tail -f /var/log/${APP_NAME}/gunicorn.out.log"
+    log "   sudo tail -f /var/log/${APP_NAME}/gunicorn.err.log"
+    log ""
+    
+    # Проверяем, доступен ли сайт
+    if curl -s -f "http://${ip_address}" >/dev/null 2>&1; then
+        log "✅ Сайт успешно запущен и доступен!"
+    else
+        warn "⚠️  Сайт может быть недоступен. Проверьте логи для диагностики."
+    fi
+}
+
 # Главная функция
 main() {
     log "Запуск деплоя приложения ${APP_NAME}..."
@@ -498,9 +481,8 @@ main() {
     # Проверяем работоспособность
     check_application
     
-    log "Деплой завершен успешно!"
-    log "Приложение доступно по адресу: http://${SERVER_NAME}"
-    log "Также попробуйте: http://$(hostname -I | awk '{print $1}')"
+    # Показываем информацию о доступе
+    show_access_info
 }
 
 # Запуск главной функции
