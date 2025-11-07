@@ -132,5 +132,3 @@ EOF"
 sudo nginx -t
 sudo systemctl reload nginx
 }
-
-log "Готово. Откройте: http://$(hostname -I | awk '{print $1}')/"
