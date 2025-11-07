@@ -50,7 +50,8 @@ ensure_pkg() {
 }
 
 psql_exec() {
-    sudo -u postgres psql -tAc "$1" || error "Ошибка выполнения SQL: $1"
+    # Переходим в домашнюю директорию postgres пользователя чтобы избежать ошибки permissions
+    sudo -u postgres bash -c "cd /tmp && psql -tAc \"$1\"" || error "Ошибка выполнения SQL: $1"
 }
 
 # Основные функции
@@ -109,20 +110,44 @@ ensure_repo() {
 ensure_venv() {
     log "Создание виртуального окружения и установка зависимостей..."
     
-    # Создание venv
+    # Проверяем, существует ли уже venv
+    if [ ! -d "${PROJECT_DIR}/.venv" ]; then
+        log "Создание нового виртуального окружения..."
+        sudo -u "$DJANGO_USER" -H bash -c "
+            cd '$PROJECT_DIR' && 
+            python3 -m venv .venv
+        " || error "Не удалось создать виртуальное окружение"
+    else
+        log "Виртуальное окружение уже существует"
+    fi
+    
+    # Обновление pip
+    log "Обновление pip..."
     sudo -u "$DJANGO_USER" -H bash -c "
         cd '$PROJECT_DIR' && 
-        python3 -m venv .venv && 
-        .venv/bin/pip install --upgrade pip
-    " || error "Не удалось создать виртуальное окружение"
+        .venv/bin/pip install --upgrade pip setuptools wheel
+    " || error "Не удалось обновить pip"
     
     # Установка зависимостей
     if [ -f "${PROJECT_DIR}/requirements.txt" ]; then
-        log "Установка Python зависимостей..."
+        log "Установка Python зависимостей из requirements.txt..."
         sudo -u "$DJANGO_USER" -H bash -c "
             cd '$PROJECT_DIR' && 
             .venv/bin/pip install -r requirements.txt
-        " || error "Не удалось установить зависимости"
+        " || error "Не удалось установить зависимости из requirements.txt"
+        
+        # Проверяем, установлен ли Django
+        log "Проверка установки Django..."
+        if ! sudo -u "$DJANGO_USER" -H bash -c "
+            cd '$PROJECT_DIR' && 
+            .venv/bin/python -c 'import django; print(django.__version__)'
+        " >/dev/null 2>&1; then
+            error "Django не установлен в виртуальном окружении"
+        else
+            log "Django успешно установлен"
+        fi
+    else
+        error "Файл requirements.txt не найден в ${PROJECT_DIR}"
     fi
 }
 
@@ -155,6 +180,7 @@ ensure_db() {
 }
 
 django_manage() {
+    log "Выполнение Django команды: $*"
     sudo -u "$DJANGO_USER" -H bash -c "
         cd '$PROJECT_DIR' && 
         source .venv/bin/activate && 
@@ -165,18 +191,37 @@ django_manage() {
 configure_django() {
     log "Настройка Django..."
     
+    # Проверяем, что Django доступен
+    log "Проверка доступности Django..."
+    if ! sudo -u "$DJANGO_USER" -H bash -c "
+        cd '$PROJECT_DIR' && 
+        source .venv/bin/activate && 
+        python -c 'import django; print(\"Django version:\", django.get_version())'
+    "; then
+        error "Django не доступен в виртуальном окружении"
+    fi
+    
     # Применение миграций
+    log "Применение миграций базы данных..."
     django_manage "python manage.py migrate"
     
     # Создание директории для статики
+    log "Создание директорий для статики и медиа..."
     sudo mkdir -p "${PROJECT_DIR}/staticfiles" "${PROJECT_DIR}/media"
     sudo chown -R "$DJANGO_USER:$DJANGO_USER" "${PROJECT_DIR}/staticfiles" "${PROJECT_DIR}/media"
+    sudo chmod -R 755 "${PROJECT_DIR}/staticfiles" "${PROJECT_DIR}/media"
     
     # Сбор статики
+    log "Сбор статических файлов..."
     django_manage "python manage.py collectstatic --noinput --clear"
     
+    # Проверка валидности конфигурации Django
+    log "Проверка конфигурации Django..."
+    django_manage "python manage.py check --deploy --fail-level WARNING"
+    
     # Создание суперпользователя (опционально, можно закомментировать)
-    # django_manage "python manage.py createsuperuser --noinput || true"
+    # log "Создание суперпользователя..."
+    # django_manage "python manage.py createsuperuser --noinput --username admin --email admin@example.com || true"
 }
 
 configure_supervisor() {
@@ -257,6 +302,11 @@ EOF
         sudo ln -s "$nginx_available" "$nginx_enabled" || error "Не удалось создать симлинк для nginx"
     fi
     
+    # Удаляем дефолтный конфиг nginx если он существует
+    if [ -f "/etc/nginx/sites-enabled/default" ]; then
+        sudo rm -f "/etc/nginx/sites-enabled/default"
+    fi
+    
     # Проверка конфигурации и перезагрузка
     sudo nginx -t || error "Ошибка конфигурации nginx"
     sudo systemctl reload nginx || error "Не удалось перезагрузить nginx"
@@ -279,6 +329,5 @@ main() {
     log "Приложение доступно по адресу: http://${SERVER_NAME}"
     log "Также попробуйте: http://$(hostname -I | awk '{print $1}')"
 }
-
 # Запуск главной функции
 main "$@"
