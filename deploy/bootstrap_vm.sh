@@ -110,23 +110,15 @@ sudo supervisorctl reread
 sudo supervisorctl update
 sudo supervisorctl status
 
-
-configure_nginx() { log "Пишу конфиг Nginx..."
+configure_nginx() 
+{ log "Пишу конфиг Nginx..."
 sudo bash -lc "cat > /etc/nginx/sites-available/${APP_NAME} <<EOF
-server { ... }
-EOF"
--f "/etc/nginx/sites-enabled/${APP_NAME}" || sudo ln -s "/etc/nginx/sites-available/\({APP_NAME}" "/etc/nginx/sites-enabled/\){APP_NAME}"
-sudo nginx -t
-sudo systemctl reload nginx
-
+server {
+listen 80;
+server_name ${SERVER_NAME};
 client_max_body_size 20m;
-
-location /static/ { alias ${PROJECT_DIR}/staticfiles/; } 
+location /static/ { alias ${PROJECT_DIR}/staticfiles/; }
 location /media/ { alias ${PROJECT_DIR}/media/; }
-
-location / { proxy_pass http://${BIND_ADDR}; 
-proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; 
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; 
 location / {
 proxy_pass http://${BIND_ADDR};
 proxy_set_header Host              \$host;
@@ -135,13 +127,10 @@ proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto \$scheme;
 }
 }
-ensure_system
-ensure_user
-ensure_repo
-ensure_venv
-ensure_db
-configure_django
-configure_supervisor
-configure_nginx
+EOF"
+-f "/etc/nginx/sites-enabled/${APP_NAME}" || sudo ln -s "/etc/nginx/sites-available/\({APP_NAME}" "/etc/nginx/sites-enabled/\){APP_NAME}"
+sudo nginx -t
+sudo systemctl reload nginx
+}
 
 log "Готово. Откройте: http://$(hostname -I | awk '{print $1}')/"
