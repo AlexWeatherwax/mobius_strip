@@ -1,0 +1,10 @@
+# Автоматически сгенерированный requirements.txt
+# Используйте: pip install -r requirements.txt
+
+clinica
+django
+drf_spectacular
+rest_framework
+rest_framework_simplejwt
+shutil
+tasks
