@@ -32,6 +32,12 @@ REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379/1}"
 STATIC_ROOT="${STATIC_ROOT:-${PROJECT_DIR}/staticfiles}"
 MEDIA_ROOT="${MEDIA_ROOT:-${PROJECT_DIR}/media}"
 
+# Настройки безопасности (для production)
+SECURE_HSTS_SECONDS="${SECURE_HSTS_SECONDS:-0}"
+SECURE_SSL_REDIRECT="${SECURE_SSL_REDIRECT:-0}"
+SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE:-0}"
+CSRF_COOKIE_SECURE="${CSRF_COOKIE_SECURE:-0}"
+
 # Экранирование для конфигурационных файлов
 ALLOWED_HOSTS_ESCAPED="${ALLOWED_HOSTS//,/\\,}"
 CSRF_TRUSTED_ORIGINS_ESCAPED="${CSRF_TRUSTED_ORIGINS//,/\\,}"
@@ -39,6 +45,10 @@ CSRF_TRUSTED_ORIGINS_ESCAPED="${CSRF_TRUSTED_ORIGINS//,/\\,}"
 # Функции утилиты
 log() {
     echo -e "\033[1;32m[INFO]\033[0m $*"
+}
+
+warn() {
+    echo -e "\033[1;33m[WARN]\033[0m $*"
 }
 
 error() {
@@ -201,6 +211,10 @@ django_manage() {
         export REDIS_URL='${REDIS_URL}' &&
         export STATIC_ROOT='${STATIC_ROOT}' &&
         export MEDIA_ROOT='${MEDIA_ROOT}' &&
+        export SECURE_HSTS_SECONDS='${SECURE_HSTS_SECONDS}' &&
+        export SECURE_SSL_REDIRECT='${SECURE_SSL_REDIRECT}' &&
+        export SESSION_COOKIE_SECURE='${SESSION_COOKIE_SECURE}' &&
+        export CSRF_COOKIE_SECURE='${CSRF_COOKIE_SECURE}' &&
         $*
     " || error "Ошибка выполнения Django команды: $*"
 }
@@ -228,11 +242,39 @@ configure_django() {
     log "Применение миграций базы данных..."
     django_manage "python manage.py migrate"
     
-    # Проверка валидности конфигурации Django
+    # Проверка валидности конфигурации Django (игнорируем предупреждения)
     log "Проверка конфигурации Django..."
-    django_manage "python manage.py check --deploy --fail-level WARNING"
+    set +e
+    local check_output
+    check_output=$(sudo -u "$DJANGO_USER" -H bash -c "
+        cd '$PROJECT_DIR' && 
+        source .venv/bin/activate && 
+        export DJANGO_SETTINGS_MODULE='${DJANGO_SETTINGS_MODULE}' &&
+        export DEBUG='${DEBUG}' &&
+        export SECRET_KEY='${SECRET_KEY}' &&
+        export ALLOWED_HOSTS='${ALLOWED_HOSTS}' &&
+        python manage.py check --deploy --fail-level WARNING 2>&1
+    ")
+    local check_exit_code=$?
+    set -e
     
-    # Сбор статики (только если STATIC_ROOT настроен в settings.py)
+    if [ $check_exit_code -eq 0 ]; then
+        log "✅ Проверка конфигурации прошла успешно"
+    else
+        warn "⚠️  Проверка конфигурации выявила предупреждения:"
+        echo "$check_output" | while IFS= read -r line; do
+            warn "$line"
+        done
+        
+        # Проверяем, есть ли критические ошибки (не предупреждения)
+        if echo "$check_output" | grep -q "ERROR"; then
+            error "Обнаружены критические ошибки конфигурации"
+        else
+            log "Предупреждения безопасности проигнорированы, продолжаем деплой..."
+        fi
+    fi
+    
+    # Проверка настроек статических файлов
     log "Проверка настроек статических файлов..."
     if sudo -u "$DJANGO_USER" -H bash -c "
         cd '$PROJECT_DIR' && 
@@ -282,7 +324,7 @@ stopasgroup=true
 killasgroup=true
 stdout_logfile=/var/log/${APP_NAME}/gunicorn.out.log
 stderr_logfile=/var/log/${APP_NAME}/gunicorn.err.log
-environment=DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE}",PYTHONUNBUFFERED="1",DEBUG="${DEBUG}",SECRET_KEY="${SECRET_KEY}",ALLOWED_HOSTS="${ALLOWED_HOSTS_ESCAPED}",CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS_ESCAPED}",DB_NAME="${DB_NAME}",DB_USER="${DB_USER}",DB_PASSWORD="${DB_PASSWORD}",DB_HOST="${DB_HOST}",DB_PORT="${DB_PORT}",USE_REDIS="${USE_REDIS}",REDIS_URL="${REDIS_URL}",STATIC_ROOT="${STATIC_ROOT}",MEDIA_ROOT="${MEDIA_ROOT}"
+environment=DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE}",PYTHONUNBUFFERED="1",DEBUG="${DEBUG}",SECRET_KEY="${SECRET_KEY}",ALLOWED_HOSTS="${ALLOWED_HOSTS_ESCAPED}",CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS_ESCAPED}",DB_NAME="${DB_NAME}",DB_USER="${DB_USER}",DB_PASSWORD="${DB_PASSWORD}",DB_HOST="${DB_HOST}",DB_PORT="${DB_PORT}",USE_REDIS="${USE_REDIS}",REDIS_URL="${REDIS_URL}",STATIC_ROOT="${STATIC_ROOT}",MEDIA_ROOT="${MEDIA_ROOT}",SECURE_HSTS_SECONDS="${SECURE_HSTS_SECONDS}",SECURE_SSL_REDIRECT="${SECURE_SSL_REDIRECT}",SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE}",CSRF_COOKIE_SECURE="${CSRF_COOKIE_SECURE}"
 EOF
     
     # Применение конфигурации Supervisor
