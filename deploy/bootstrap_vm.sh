@@ -21,7 +21,9 @@ REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379/1}"
 ALLOWED_HOSTS_ESCAPED="${ALLOWED_HOSTS//,/\,}"
 CSRF_TRUSTED_ORIGINS_ESCAPED="${CSRF_TRUSTED_ORIGINS//,/\,}"
 
-log() { echo -e "\033[1;32m[INFO]\033[0m $*"; } ensure_pkg() { dpkg -s "$1" >/dev/null 2>&1 || sudo apt-get install -y "$1"; } psql_exec() { sudo -u postgres psql -tAc "$1"; }
+log() { echo -e "\033[1;32m[INFO]\033[0m $*"; } 
+ensure_pkg() { dpkg -s "$1" >/dev/null 2>&1 || sudo apt-get install -y "$1"; } 
+psql_exec() { sudo -u postgres psql -tAc "$1"; }
 ensure_system() {
 sudo apt-get update -y
 ensure_pkg git
@@ -40,7 +42,10 @@ sudo systemctl enable --now nginx
 sudo systemctl enable --now supervisor
 }
 
-sudo systemctl enable --now postgresql sudo systemctl enable --now redis-server sudo systemctl enable --now nginx sudo systemctl enable --now supervisor }
+sudo systemctl enable --now postgresql 
+sudo systemctl enable --now redis-server 
+sudo systemctl enable --now nginx 
+sudo systemctl enable --now supervisor }
 ensure_user() {
 id -u "\(DJANGO_USER" >/dev/null 2>&1 || sudo adduser --disabled-password --gecos "" "\)DJANGO_USER"
 }
@@ -65,16 +70,26 @@ fi
 }
 
 
-ensure_db() { log "Создаю/проверяю БД и пользователя..." psql_exec "DO $$ BEGIN
+ensure_db() 
+{ log "Создаю/проверяю БД и пользователя..." 
+psql_exec "DO $$ BEGIN
 IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='${DB_USER}') THEN
 CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASSWORD}';
 END IF;
 END $$;"
+}
 psql_exec "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_database WHERE datname='${DB_NAME}') THEN CREATE DATABASE ${DB_NAME} OWNER ${DB_USER}; END IF; END $$;" }
-django_manage() { sudo -u "\(DJANGO_USER" -H bash -lc "cd '\)PROJECT_DIR' && $*"; }
+django_manage() { 
+sudo -u "\(DJANGO_USER" -H bash -lc "cd '\)PROJECT_DIR' && $*"; 
+}
 
-configure_django() { log "Применяю миграции и собираю статику..." django_manage ".venv/bin/python manage.py migrate" mkdir -p "${PROJECT_DIR}/staticfiles" django_manage ".venv/bin/python manage.py collectstatic --noinput || true" }
-configure_supervisor() { log "Пишу конфиг Supervisor..."
+configure_django() 
+{ log "Применяю миграции и собираю статику..." 
+django_manage ".venv/bin/python manage.py migrate" 
+mkdir -p "${PROJECT_DIR}/staticfiles" 
+django_manage ".venv/bin/python manage.py collectstatic --noinput || true" }
+configure_supervisor() 
+{ log "Пишу конфиг Supervisor..."
 sudo bash -lc "cat > /etc/supervisor/conf.d/${APP_NAME}.conf <<EOF
 program:${APP_NAME}
 directory=${PROJECT_DIR}
@@ -106,10 +121,20 @@ sudo systemctl reload nginx
 
 client_max_body_size 20m;
 
-location /static/ { alias ${PROJECT_DIR}/staticfiles/; } location /media/ { alias ${PROJECT_DIR}/media/; }
+location /static/ { alias ${PROJECT_DIR}/staticfiles/; } 
+location /media/ { alias ${PROJECT_DIR}/media/; }
 
-location / { proxy_pass http://${BIND_ADDR}; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; } } EOF" -f "/etc/nginx/sites-enabled/${APP_NAME}" || sudo ln -s "/etc/nginx/sites-available/\({APP_NAME}" "/etc/nginx/sites-enabled/\){APP_NAME}" sudo nginx -t sudo systemctl reload nginx }
-
+location / { proxy_pass http://${BIND_ADDR}; 
+proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; 
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; 
+location / {
+proxy_pass http://${BIND_ADDR};
+proxy_set_header Host              \$host;
+proxy_set_header X-Real-IP         \$remote_addr;
+proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto \$scheme;
+}
+}
 ensure_system
 ensure_user
 ensure_repo
